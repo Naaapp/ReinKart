@@ -64,12 +64,12 @@ USE_REVERSE_IMAGES = False
 
 ACTIONS = 3 # number of valid actions
 GAMMA = 0.99 # decay rate of past observations
-OBSERVATION = 3200. # timesteps to observe before training
+OBSERVATION = 36. # timesteps to observe before training
 EXPLORE = 3000000. # frames over which to anneal epsilon
 FINAL_EPSILON = 0.0001 # final value of epsilon
 INITIAL_EPSILON = 0.01 # starting value of epsilon
-REPLAY_MEMORY = 50000 # number of previous transitions to remember
-BATCH = 32 # size of minibatch
+REPLAY_MEMORY = 100 # number of previous transitions to remember
+BATCH = 4 # size of minibatch
 FRAME_PER_ACTION = 1
 LEARNING_RATE = 1e-4
 
@@ -81,6 +81,13 @@ LEARNING_RATE = 1e-4
 
 model = create_model(keep_prob=1)
 
+#print ("Now we load weight")
+#model.load_weights("model12.h5")
+#adam = Adam(lr=LEARNING_RATE)
+#model.compile(loss='mse',optimizer=adam)
+#print ("Weight load successfully")    
+
+
 def prepare_image(im):
     im = im.resize((INPUT_WIDTH, INPUT_HEIGHT))
     im_arr = np.frombuffer(im.tobytes(), dtype=np.uint8)
@@ -88,46 +95,11 @@ def prepare_image(im):
     im_arr = np.expand_dims(im_arr, axis=0)
     return im_arr
 
-def get_activations(model, model_inputs, print_shape_only=False, layer_name=None):
-    import keras.backend as K
-    print('----- activations -----')
-    activations = []
-    inp = model.input
-
-    model_multi_inputs_cond = True
-    if not isinstance(inp, list):
-        # only one input! let's wrap it in a list.
-        inp = [inp]
-        model_multi_inputs_cond = False
-
-    outputs = [layer.output for layer in model.layers if
-               layer.name == layer_name or layer_name is None]  # all layer outputs
-
-    funcs = [K.function(inp + [K.learning_phase()], [out]) for out in outputs]  # evaluation functions
-
-    if model_multi_inputs_cond:
-        list_inputs = []
-        list_inputs.extend(model_inputs)
-        list_inputs.append(1.)
-    else:
-        list_inputs = [model_inputs, 1.]
-
-    # Learning phase. 1 = Test mode (no dropout or batch normalization)
-    # layer_outputs = [func([model_inputs, 1.])[0] for func in funcs]
-    layer_outputs = [func(list_inputs)[0] for func in funcs]
-    for layer_activations in layer_outputs:
-        activations.append(layer_activations)
-        if print_shape_only:
-            print(layer_activations.shape)
-        else:
-            print(layer_activations)
-    return activations
-
-
-
-
 
 def train_network( s_t, D,action_index,x_t1_colored, r_t, init, t):
+    
+    if t == OBSERVATION:
+        print("observation finished")
     
 
     loss = 0
@@ -175,12 +147,14 @@ def train_network( s_t, D,action_index,x_t1_colored, r_t, init, t):
     s_t1 = np.append(x_t1, s_t[:, :, :, :3], axis=3)
     
     # store the transition in D
-    D.append((s_t, action_index, r_t, s_t1))
+    terminal = 1
+    D.append((s_t, action_index, r_t, s_t1, terminal))
     if len(D) > REPLAY_MEMORY:
         D.popleft()
 
     #only train if done observing
     if t > OBSERVE:
+
         #sample a minibatch to train on
         minibatch = random.sample(D, BATCH)
 
@@ -197,17 +171,20 @@ def train_network( s_t, D,action_index,x_t1_colored, r_t, init, t):
     s_t = s_t1
     t = t + 1
     
-    if t % 50 == 0:
+    if t % 20 == 0:
         print("Now we save model")
-        model.save_weights("model3.h5", overwrite=True)
+        model.save_weights("model13.h5", overwrite=True)
         with open("model.json", "w") as outfile:
             json.dump(model.to_json(), outfile)
     
     a_t = np.zeros([ACTIONS])
     #choose an action epsilon greedy
     if t % FRAME_PER_ACTION == 0:
-        if random.random() <= epsilon:
-#            print("----------Random Action----------")
+        if t <= OBSERVE:
+            action_index = 1
+            a_t[action_index] = 1
+        elif random.random() <= epsilon:            
+            print("----------Random Action----------")
             action_index = random.randrange(ACTIONS)
             a_t[action_index] = 1
         else:
@@ -231,13 +208,6 @@ class TCPHandler(StreamRequestHandler):
         logger.info("Handling a new connection...")
         t = 0
 
-        
-        print ("Now we load weight")
-        model.load_weights("model3.h5")
-        adam = Adam(lr=LEARNING_RATE)
-        model.compile(loss='mse',optimizer=adam)
-        print ("Weight load successfully")    
-        
         D = deque()
         s_t = 0
         action_index = 0
@@ -254,25 +224,6 @@ class TCPHandler(StreamRequestHandler):
                 if im != None:
                     
                     im_ = im
-#                    if t == 1:
-#                        im = im.resize((INPUT_WIDTH, INPUT_HEIGHT))
-#                        im_arr = np.frombuffer(im.tobytes(), dtype=np.uint8)
-#                        im = im_arr.reshape((INPUT_HEIGHT, INPUT_WIDTH, INPUT_CHANNELS))
-#                        im_arr = np.expand_dims(im, axis=0)
-#                        
-#                        for activation in get_activations(model, im_arr, print_shape_only=True, layer_name="first_layer"):
-#                            activations = [activation[0, :, :, i] for i in range(24)]
-#                            im = np.vstack((
-#                                np.hstack(activations[:3]), np.hstack(activations[3:6]),
-#                                np.hstack(activations[6:9]), np.hstack(activations[9:12]),
-#                                np.hstack(activations[12:15]), np.hstack(activations[15:18]),
-#                                np.hstack(activations[18:21]), np.hstack(activations[21:24])
-#                            ))
-#                        im = np.expand_dims(im, axis=2)
-#                        plt.imshow(np.concatenate((im, im, im), axis=2))
-#                        plt.axis('off')
-#                        plt.show()
-                    
                     im = prepare_image(im_)
                     prediction, s_t, D, action_index = train_network( s_t, D, action_index, im,score,init,t)
                     #print(prediction)

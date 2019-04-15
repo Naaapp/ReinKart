@@ -53,6 +53,11 @@ end
 function util.readPlayerX() return mainmemory.readfloat(0x0F69A4, true) end
 function util.readPlayerY() return mainmemory.readfloat(0x0F69AC, true) end
 function util.readPlayerZ() return mainmemory.readfloat(0xF69A8, true) end
+function util.readPlayerXV() return mainmemory.readfloat(0x0F69C4, true) end
+function util.readPlayerZV() return mainmemory.readfloat(0x0F69C8, true) end
+function util.readPlayerYV() return mainmemory.readfloat(0x0F69CC, true) end
+function util.readPlayerCos() return mainmemory.readfloat(0xF6B0C, true) end
+function util.readPlayerSin() return mainmemory.readfloat(0xF6B04, true) end
 function util.readPlayerPos()
   return {util.readPlayerX(), util.readPlayerY(), util.readPlayerZ()}
 end

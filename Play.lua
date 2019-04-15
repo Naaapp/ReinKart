@@ -15,7 +15,7 @@ may want to consider adding some frames here. ]]--
 WAIT_FRAMES = 10
 
 USE_MAPPING = true -- Whether or not to use input remapping.
-CHECK_PROGRESS_EVERY = 5 -- Check progress after this many frames to detect if we get stuck.
+CHECK_PROGRESS_EVERY = 10 -- Check progress after this many frames to detect if we get stuck.
 CHECK_PREVIOUS_SCORE_EVERY = 4
 --[[ END CONFIGURATION ]]--
 
@@ -51,6 +51,11 @@ local frame = 1
 local init = 0
 
 
+function calculate_relative_velocity(cos , sin , vx , vy )
+  return vy*vy
+end
+
+
 outgoing_message, outgoing_message_index = nil, nil
 function request_prediction()
 
@@ -58,12 +63,19 @@ function request_prediction()
 
   local dif = current_progress - previous_progress
   local velocity = util.readVelocity()
-
+  local cos = util.readPlayerCos()
+  local sin = util.readPlayerSin()
+  local vx = util.readPlayerXV()
+  local vy = util.readPlayerYV()
+  print(vy)
 
   --score = ((dif*80)*(dif*80)*(1/velocity))*10 + 1
-  score = ((dif*100)*(dif*100)) + 1
-  if velocity == 0 then
-    score = 2
+  score = ((dif*80)*(dif*80)) + 1
+
+  if velocity > 3 and score < 1.2 then
+    score = 0
+  end
+  if velocity > 3 then
   end
   if score > 2 then
     score = 2
@@ -71,8 +83,9 @@ function request_prediction()
   if dif < 0 then
     score = 0
   end
-
-  print(score)
+  --print(score)
+  --print(dif)
+  
 
   if frame == 1 then
     init = 1
@@ -123,7 +136,7 @@ while util.readProgress() < 3 do
 
 
 
-  while frame < 100 do
+  while frame < 10 do
   joypad.set({["P1 A"] = true})
   joypad.setanalog({["P1 X Axis"] = util.convertSteerToJoystick(0) })
   emu.frameadvance()
@@ -205,7 +218,7 @@ while util.readProgress() < 3 do
   current_progress = util.readProgress()
 
   -- if we haven't made any progress since the last check, just break.
-  if frame > 100 then
+  if frame > 20 then
     if frame % CHECK_PROGRESS_EVERY == 0 then
       if current_progress <= previous_progress then
         break
