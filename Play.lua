@@ -12,7 +12,7 @@ USE_CLIPBOARD = true -- Use the clipboard to send screenshots to the predict ser
 
 --[[ How many frames to wait before sending a new prediction request. If you're using a file, you
 may want to consider adding some frames here. ]]--
-WAIT_FRAMES = 10
+WAIT_FRAMES = 5
 
 USE_MAPPING = true -- Whether or not to use input remapping.
 CHECK_PROGRESS_EVERY = 10 -- Check progress after this many frames to detect if we get stuck.
@@ -67,12 +67,15 @@ function request_prediction()
   local sin = util.readPlayerSin()
   local vx = util.readPlayerXV()
   local vy = util.readPlayerYV()
-  print(vy)
+  local distance = current_progress
+  --print(vy)
 
   --score = ((dif*80)*(dif*80)*(1/velocity))*10 + 1
   score = ((dif*80)*(dif*80)) + 1
 
-  if velocity > 3 and score < 1.2 then
+  print(score)
+
+--[[  if velocity > 3 and score < 1.2 then
     score = 0
   end
   if velocity > 3 then
@@ -82,7 +85,7 @@ function request_prediction()
   end
   if dif < 0 then
     score = 0
-  end
+  end--]]
   --print(score)
   --print(dif)
   
@@ -97,7 +100,19 @@ function request_prediction()
 
   if USE_CLIPBOARD then
     client.screenshottoclipboard()
-    outgoing_message = "PREDICTFROMCLIPBOARD"..tostring(init)..tostring(score).."\n"
+    outgoing_message = "MESSAGE"
+                      ..tostring(init)
+                      .."SCORE"
+                      ..string.format("%.14f", score)
+                      .."DISTANCE"
+                      ..string.format("%.14f", distance)
+                      .."COS"
+                      ..string.format("%.14f", cos)
+                      .."SIN"
+                      ..string.format("%.14f", sin)
+                      .."VELOCITY"
+                      ..string.format("%.14f", velocity)
+                      .."\n"
   else
     client.screenshot(SCREENSHOT_FILE)
     outgoing_message = "PREDICT:"..tostring(init)..tostring(score).. SCREENSHOT_FILE .. "\n"
@@ -218,7 +233,7 @@ while util.readProgress() < 3 do
   current_progress = util.readProgress()
 
   -- if we haven't made any progress since the last check, just break.
-  if frame > 20 then
+  if frame > 50 then
     if frame % CHECK_PROGRESS_EVERY == 0 then
       if current_progress <= previous_progress then
         break

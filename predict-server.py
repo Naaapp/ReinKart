@@ -96,7 +96,7 @@ def prepare_image(im):
     return im_arr
 
 
-def train_network( s_t, D,action_index,x_t1_colored, r_t, init, t):
+def train_network( s_t, D,action_index, r_t, init, t, distance, cos, sin, velocity):
     
     if t == OBSERVATION:
         print("observation finished")
@@ -105,25 +105,17 @@ def train_network( s_t, D,action_index,x_t1_colored, r_t, init, t):
     loss = 0
     # get the first state by doing nothing and preprocess the image to 80x80x4
     if t == 1:
+
+        x_t = [distance, cos, sin, velocity]
         
-    
-        x_t = skimage.color.rgb2gray(x_t1_colored)
+        #s_t = np.stack((x_t, x_t, x_t, x_t))
         
-        x_t = x_t.reshape(x_t.shape[1], x_t.shape[2], 1)  
+        #if we not stack
+        s_t = np.array([x_t])
         
-        
-        x_t = skimage.transform.resize(x_t,(80,80))
-        
-        x_t = skimage.exposure.rescale_intensity(x_t,out_range=(0,255))
-    
-        x_t = x_t / 255.0
-        
-    
-        s_t = np.stack((x_t, x_t, x_t, x_t), axis=2)
-        
-    
+
         #In Keras, need to reshape
-        s_t = s_t.reshape(1, s_t.shape[0], s_t.shape[1], s_t.shape[2])  #1*80*80*4
+#        s_t = s_t.reshape(1, s_t.shape[0], s_t.shape[1], s_t.shape[2])  #1*80*80*4
         action_index = 1
         
         returnvalue = [0,1,0]
@@ -133,18 +125,13 @@ def train_network( s_t, D,action_index,x_t1_colored, r_t, init, t):
     OBSERVE = OBSERVATION
     epsilon = INITIAL_EPSILON
     
-    x_t1 = skimage.color.rgb2gray(x_t1_colored)
-    x_t1 = x_t1.reshape(x_t1.shape[1], x_t1.shape[2], 1)  
-    x_t1 = skimage.transform.resize(x_t1,(80,80))
-    x_t1 = skimage.exposure.rescale_intensity(x_t1, out_range=(0, 255))
+    x_t1 = [distance, cos, sin, velocity]
+
+    #s_t1 = np.stack((x_t1, s_t[0], s_t[1], s_t[2]))
     
+    #if we not stack
+    s_t1 = np.array([x_t1])
 
-    x_t1 = x_t1 / 255.0
-    
-
-
-    x_t1 = x_t1.reshape(1, x_t1.shape[0], x_t1.shape[1], 1) #1x80x80x1
-    s_t1 = np.append(x_t1, s_t[:, :, :, :3], axis=3)
     
     # store the transition in D
     terminal = 1
@@ -160,8 +147,9 @@ def train_network( s_t, D,action_index,x_t1_colored, r_t, init, t):
 
         #Now we do the experience replay
         state_t, action_t, reward_t, state_t1, terminal = zip(*minibatch)
-        state_t = np.concatenate(state_t)
-        state_t1 = np.concatenate(state_t1)
+        
+        print(state_t)
+
         targets = model.predict(state_t)
         Q_sa = model.predict(state_t1)
         targets[range(BATCH), action_t] = reward_t + GAMMA*np.max(Q_sa, axis=1)*np.invert(terminal)
@@ -180,7 +168,7 @@ def train_network( s_t, D,action_index,x_t1_colored, r_t, init, t):
     a_t = np.zeros([ACTIONS])
     #choose an action epsilon greedy
     if t % FRAME_PER_ACTION == 0:
-        if t <= OBSERVE:
+        if t < OBSERVE:
             action_index = 1
             a_t[action_index] = 1
         elif random.random() <= epsilon:            
@@ -189,8 +177,13 @@ def train_network( s_t, D,action_index,x_t1_colored, r_t, init, t):
             a_t[action_index] = 1
         else:
 #            print("----------Predicted Action----------")
+            
+            print(s_t)
+#            print(s_t)
             q = model.predict(s_t)       #input a stack of 4 images, get the prediction
+
             max_Q = np.argmax(q)
+            print(max_Q)
             action_index = max_Q
             a_t[max_Q] = 1
 
@@ -217,19 +210,33 @@ class TCPHandler(StreamRequestHandler):
             message = str(line.strip(),'utf-8')
             logger.debug(message)
 
-            if message.startswith("PREDICTFROMCLIPBOARD"):
-                im = ImageGrab.grabclipboard()
-                init = message[20] 
-                score = float(message[21:]) - 1
-                if im != None:
-                    
-                    im_ = im
-                    im = prepare_image(im_)
-                    prediction, s_t, D, action_index = train_network( s_t, D, action_index, im,score,init,t)
-                    #print(prediction)
-                    self.wfile.write((str(int(prediction[0])) + (str(int(prediction[1]))) + (str(int(prediction[2]))) + "\n").encode('utf-8'))
-                else:
-                    self.wfile.write("PREDICTIONERROR\n".encode('utf-8'))
+            if message.startswith("MESSAGE"):
+                index_score = message.find("SCORE")
+                index_distance = message.find("DISTANCE")
+                index_cos = message.find("COS")
+                index_sin = message.find("SIN")
+                index_velocity = message.find("VELOCITY")
+                
+                init = message[7]
+                
+                index_begin = index_score + 5
+                index_end = index_distance - 1
+                score = float(message[index_begin:index_end]) - 1
+                index_begin = index_distance + 8
+                index_end = index_cos - 1
+                distance = float(message[index_begin:index_end])
+                index_begin = index_cos + 3
+                index_end = index_sin - 1
+                cos = float(message[index_begin:index_end]) 
+                index_begin = index_sin + 3
+                index_end = index_velocity - 1
+                sin = float(message[index_begin:index_end]) 
+                index_begin = index_velocity + 8
+                velocity = float(message[index_begin:index_begin+10]) 
+
+                prediction, s_t, D, action_index = train_network(s_t, D, action_index, score, init, t, distance, cos, sin, velocity)
+                self.wfile.write((str(int(prediction[0])) + (str(int(prediction[1]))) + (str(int(prediction[2]))) + "\n").encode('utf-8'))
+
 
             if message.startswith("PREDICT:"):
                 im = Image.open(message[9:])

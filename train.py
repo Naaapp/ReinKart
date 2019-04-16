@@ -72,6 +72,9 @@ BATCH = 32 # size of minibatch
 FRAME_PER_ACTION = 1
 LEARNING_RATE = 1e-4
 
+N_INPUT = 4
+N_OUTPUT = 3
+
 img_rows , img_cols = 80, 80
 #Convert image into Black and white
 img_channels = 4 #We stack 4 frames
@@ -93,16 +96,13 @@ def create_model(keep_prob=0.6):
 
     print("Now we build the model")
     model = Sequential()
-    model.add(Conv2D(32, (8, 8), input_shape=(img_rows,img_cols,img_channels), strides=(4, 4), padding="same"))  #80*80*4
-    model.add(Activation('relu'))
-    model.add(Conv2D(64, (4, 4), strides=(2, 2), padding='same'))
-    model.add(Activation('relu'))
-    model.add(Convolution2D(64, (3, 3), strides=(1, 1), padding='same'))
-    model.add(Activation('relu'))
-    model.add(Flatten())
-    model.add(Dense(512))
-    model.add(Activation('relu'))
-    model.add(Dense(3))
+    model.add(Dense(output_dim=120, activation='relu', input_dim=N_INPUT))
+    model.add(Dropout(0.15))
+    model.add(Dense(output_dim=120, activation='relu'))
+    model.add(Dropout(0.15))
+    model.add(Dense(output_dim=120, activation='relu'))
+    model.add(Dropout(0.15))
+    model.add(Dense(output_dim=N_OUTPUT, activation='softmax'))
    
     adam = Adam(lr=LEARNING_RATE)
     model.compile(loss='mse',optimizer=adam)
