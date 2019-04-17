@@ -81,12 +81,12 @@ LEARNING_RATE = 1e-3
 
 model = create_model(keep_prob=1)
 
-#print ("Now we load weight")
-#model.load_weights("model21.h5")
-#adam = Adam(lr=LEARNING_RATE)
-#model.compile(loss='mse',optimizer=adam)
-#print ("Weight load successfully")    
-#
+print ("Now we load weight")
+model.load_weights("model30.h5")
+adam = Adam(lr=LEARNING_RATE)
+model.compile(loss='mse',optimizer=adam)
+print ("Weight load successfully")    
+
 
 def prepare_image(im):
     im = im.resize((INPUT_WIDTH, INPUT_HEIGHT))

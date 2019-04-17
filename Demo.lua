@@ -27,7 +27,7 @@ while true do
     play()
 
     -- If the race was successful, play a little but forward so that we can see the times.
-    if util.readProgress() >= 3 then
+    if util.readProgress() >= 1 then
       client.unpause()
       print ("Time (seconds):", util.readTimer())
       for i=1, RACE_END_FRAMES do emu.frameadvance() end
