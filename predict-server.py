@@ -64,29 +64,29 @@ USE_REVERSE_IMAGES = False
 
 ACTIONS = 3 # number of valid actions
 GAMMA = 0.99 # decay rate of past observations
-OBSERVATION = 36. # timesteps to observe before training
+OBSERVATION = 18. # timesteps to observe before training
 EXPLORE = 3000000. # frames over which to anneal epsilon
 FINAL_EPSILON = 0.0001 # final value of epsilon
-INITIAL_EPSILON = 0.01 # starting value of epsilon
+INITIAL_EPSILON = 0.1 # starting value of epsilon
 REPLAY_MEMORY = 100 # number of previous transitions to remember
-BATCH = 4 # size of minibatch
+BATCH = 10 # size of minibatch
 FRAME_PER_ACTION = 1
-LEARNING_RATE = 1e-4
 
 img_rows , img_cols = 80, 80
 #Convert image into Black and white
 img_channels = 4 #We stack 4 frames
 
-LEARNING_RATE = 1e-4
+LEARNING_RATE = 1e-3
+
 
 model = create_model(keep_prob=1)
 
 #print ("Now we load weight")
-#model.load_weights("model12.h5")
+#model.load_weights("model21.h5")
 #adam = Adam(lr=LEARNING_RATE)
 #model.compile(loss='mse',optimizer=adam)
 #print ("Weight load successfully")    
-
+#
 
 def prepare_image(im):
     im = im.resize((INPUT_WIDTH, INPUT_HEIGHT))
@@ -100,9 +100,7 @@ def train_network( s_t, D,action_index, r_t, init, t, distance, cos, sin, veloci
     
     if t == OBSERVATION:
         print("observation finished")
-    
 
-    loss = 0
     # get the first state by doing nothing and preprocess the image to 80x80x4
     if t == 1:
 
@@ -118,7 +116,7 @@ def train_network( s_t, D,action_index, r_t, init, t, distance, cos, sin, veloci
 #        s_t = s_t.reshape(1, s_t.shape[0], s_t.shape[1], s_t.shape[2])  #1*80*80*4
         action_index = 1
         
-        returnvalue = [0,1,0]
+        returnvalue = [1,0,0]
         return returnvalue, s_t, D, action_index #go straight forward at init, no need to use the model
         
     
@@ -134,7 +132,7 @@ def train_network( s_t, D,action_index, r_t, init, t, distance, cos, sin, veloci
 
     
     # store the transition in D
-    terminal = 1
+    terminal = 0
     D.append((s_t, action_index, r_t, s_t1, terminal))
     if len(D) > REPLAY_MEMORY:
         D.popleft()
@@ -144,24 +142,21 @@ def train_network( s_t, D,action_index, r_t, init, t, distance, cos, sin, veloci
 
         #sample a minibatch to train on
         minibatch = random.sample(D, BATCH)
-
-        #Now we do the experience replay
-        state_t, action_t, reward_t, state_t1, terminal = zip(*minibatch)
         
-        print(state_t)
-
-        targets = model.predict(state_t)
-        Q_sa = model.predict(state_t1)
-        targets[range(BATCH), action_t] = reward_t + GAMMA*np.max(Q_sa, axis=1)*np.invert(terminal)
-
-        loss += model.train_on_batch(state_t, targets)
+        for state_t, action_t, reward_t, state_t1, terminal in minibatch:
+            target = reward_t
+            if not terminal:
+                target = reward_t + GAMMA * np.amax(model.predict(state_t1)[0])
+            target_f = model.predict(state_t)
+            target_f[0][np.argmax(action_t)] = target
+            model.fit(state_t, target_f, epochs=1, verbose=0)
 
     s_t = s_t1
     t = t + 1
     
-    if t % 20 == 0:
+    if t % 40 == 0:
         print("Now we save model")
-        model.save_weights("model13.h5", overwrite=True)
+        model.save_weights("model30.h5", overwrite=True)
         with open("model.json", "w") as outfile:
             json.dump(model.to_json(), outfile)
     
@@ -169,7 +164,7 @@ def train_network( s_t, D,action_index, r_t, init, t, distance, cos, sin, veloci
     #choose an action epsilon greedy
     if t % FRAME_PER_ACTION == 0:
         if t < OBSERVE:
-            action_index = 1
+            action_index = 0
             a_t[action_index] = 1
         elif random.random() <= epsilon:            
             print("----------Random Action----------")
@@ -178,13 +173,11 @@ def train_network( s_t, D,action_index, r_t, init, t, distance, cos, sin, veloci
         else:
 #            print("----------Predicted Action----------")
             
-            print(s_t)
-#            print(s_t)
             q = model.predict(s_t)       #input a stack of 4 images, get the prediction
 
-            max_Q = np.argmax(q)
-            print(max_Q)
+            max_Q = np.argmax(q[0])
             action_index = max_Q
+            #print(q[0])
             a_t[max_Q] = 1
 
     #We reduced the epsilon gradually

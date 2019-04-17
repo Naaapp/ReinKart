@@ -70,7 +70,7 @@ INITIAL_EPSILON = 0.1 # starting value of epsilon
 REPLAY_MEMORY = 50000 # number of previous transitions to remember
 BATCH = 32 # size of minibatch
 FRAME_PER_ACTION = 1
-LEARNING_RATE = 1e-4
+LEARNING_RATE = 1e-3
 
 N_INPUT = 4
 N_OUTPUT = 3
@@ -97,6 +97,10 @@ def create_model(keep_prob=0.6):
     print("Now we build the model")
     model = Sequential()
     model.add(Dense(output_dim=120, activation='relu', input_dim=N_INPUT))
+    model.add(Dropout(0.15))
+    model.add(Dense(output_dim=120, activation='relu'))
+    model.add(Dropout(0.15))
+    model.add(Dense(output_dim=120, activation='relu'))
     model.add(Dropout(0.15))
     model.add(Dense(output_dim=120, activation='relu'))
     model.add(Dropout(0.15))
