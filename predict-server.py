@@ -47,7 +47,7 @@ from socketserver import TCPServer, StreamRequestHandler
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-from train import create_model, is_valid_track_code, INPUT_WIDTH, INPUT_HEIGHT, INPUT_CHANNELS
+from train import create_model, is_valid_track_code
 
 from collections import deque
 from keras.optimizers import SGD , Adam
@@ -81,12 +81,12 @@ LEARNING_RATE = 1e-3
 
 model = create_model(keep_prob=1)
 
-print ("Now we load weight")
-model.load_weights("model30.h5")
-adam = Adam(lr=LEARNING_RATE)
-model.compile(loss='mse',optimizer=adam)
-print ("Weight load successfully")    
-
+#print ("Now we load weight")
+#model.load_weights("model32.h5")
+#adam = Adam(lr=LEARNING_RATE)
+#model.compile(loss='mse',optimizer=adam)
+#print ("Weight load successfully")    
+#
 
 def prepare_image(im):
     im = im.resize((INPUT_WIDTH, INPUT_HEIGHT))
@@ -96,24 +96,28 @@ def prepare_image(im):
     return im_arr
 
 
-def train_network( s_t, D,action_index, r_t, init, t, distance, cos, sin, velocity):
-    
+def train_network( s_t, D,action_index,x_t1_colored, r_t, init, t):    
     if t == OBSERVATION:
         print("observation finished")
 
     # get the first state by doing nothing and preprocess the image to 80x80x4
     if t == 1:
 
-        x_t = [distance, cos, sin, velocity]
+        x_t = skimage.color.rgb2gray(x_t1_colored)
         
-        #s_t = np.stack((x_t, x_t, x_t, x_t))
+        x_t = x_t.reshape(x_t.shape[1], x_t.shape[2], 1)  
         
-        #if we not stack
-        s_t = np.array([x_t])
         
-
+        x_t = skimage.transform.resize(x_t,(80,80))
+        
+        x_t = skimage.exposure.rescale_intensity(x_t,out_range=(0,255))
+    
+        x_t = x_t / 255.0
+        
+    
+        s_t = np.stack((x_t, x_t, x_t, x_t), axis=2)
         #In Keras, need to reshape
-#        s_t = s_t.reshape(1, s_t.shape[0], s_t.shape[1], s_t.shape[2])  #1*80*80*4
+        s_t = s_t.reshape(1, s_t.shape[0], s_t.shape[1], s_t.shape[2])  #1*80*80*4
         action_index = 1
         
         returnvalue = [1,0,0]
@@ -123,40 +127,44 @@ def train_network( s_t, D,action_index, r_t, init, t, distance, cos, sin, veloci
     OBSERVE = OBSERVATION
     epsilon = INITIAL_EPSILON
     
-    x_t1 = [distance, cos, sin, velocity]
-
-    #s_t1 = np.stack((x_t1, s_t[0], s_t[1], s_t[2]))
+    x_t1 = skimage.color.rgb2gray(x_t1_colored)
+    x_t1 = x_t1.reshape(x_t1.shape[1], x_t1.shape[2], 1)  
+    x_t1 = skimage.transform.resize(x_t1,(80,80))
+    x_t1 = skimage.exposure.rescale_intensity(x_t1, out_range=(0, 255))
+    x_t1 = x_t1 / 255.0
     
-    #if we not stack
-    s_t1 = np.array([x_t1])
+    x_t1 = x_t1.reshape(1, x_t1.shape[0], x_t1.shape[1], 1) #1x80x80x1
+    s_t1 = np.append(x_t1, s_t[:, :, :, :3], axis=3)
 
     
     # store the transition in D
     terminal = 0
+    loss = 0
     D.append((s_t, action_index, r_t, s_t1, terminal))
     if len(D) > REPLAY_MEMORY:
         D.popleft()
 
     #only train if done observing
     if t > OBSERVE:
-
         #sample a minibatch to train on
         minibatch = random.sample(D, BATCH)
-        
-        for state_t, action_t, reward_t, state_t1, terminal in minibatch:
-            target = reward_t
-            if not terminal:
-                target = reward_t + GAMMA * np.amax(model.predict(state_t1)[0])
-            target_f = model.predict(state_t)
-            target_f[0][np.argmax(action_t)] = target
-            model.fit(state_t, target_f, epochs=1, verbose=0)
+
+        #Now we do the experience replay
+        state_t, action_t, reward_t, state_t1, terminal = zip(*minibatch)
+        state_t = np.concatenate(state_t)
+        state_t1 = np.concatenate(state_t1)
+        targets = model.predict(state_t)
+        Q_sa = model.predict(state_t1)
+        targets[range(BATCH), action_t] = reward_t + GAMMA*np.max(Q_sa, axis=1)*np.invert(terminal)
+
+        loss += model.train_on_batch(state_t, targets)
 
     s_t = s_t1
     t = t + 1
     
     if t % 40 == 0:
         print("Now we save model")
-        model.save_weights("model30.h5", overwrite=True)
+        model.save_weights("model40.h5", overwrite=True)
         with open("model.json", "w") as outfile:
             json.dump(model.to_json(), outfile)
     
@@ -175,7 +183,8 @@ def train_network( s_t, D,action_index, r_t, init, t, distance, cos, sin, veloci
             
             q = model.predict(s_t)       #input a stack of 4 images, get the prediction
 
-            max_Q = np.argmax(q[0])
+            max_Q = np.argmax(q)
+            #print(q)
             action_index = max_Q
             #print(q[0])
             a_t[max_Q] = 1
@@ -204,6 +213,7 @@ class TCPHandler(StreamRequestHandler):
             logger.debug(message)
 
             if message.startswith("MESSAGE"):
+                im = ImageGrab.grabclipboard()
                 index_score = message.find("SCORE")
                 index_distance = message.find("DISTANCE")
                 index_cos = message.find("COS")
@@ -225,11 +235,16 @@ class TCPHandler(StreamRequestHandler):
                 index_end = index_velocity - 1
                 sin = float(message[index_begin:index_end]) 
                 index_begin = index_velocity + 8
-                velocity = float(message[index_begin:index_begin+10]) 
-
-                prediction, s_t, D, action_index = train_network(s_t, D, action_index, score, init, t, distance, cos, sin, velocity)
-                self.wfile.write((str(int(prediction[0])) + (str(int(prediction[1]))) + (str(int(prediction[2]))) + "\n").encode('utf-8'))
-
+                velocity = float(message[index_begin:index_begin+10])
+                
+                if im != None:
+                    
+                    im_ = im
+                    im = prepare_image(im_)
+                    prediction, s_t, D, action_index = train_network( s_t, D, action_index, im,score,init,t)
+                    self.wfile.write((str(int(prediction[0])) + (str(int(prediction[1]))) + (str(int(prediction[2]))) + "\n").encode('utf-8'))
+                else:
+                    self.wfile.write("PREDICTIONERROR\n".encode('utf-8'))
 
             if message.startswith("PREDICT:"):
                 im = Image.open(message[9:])

@@ -15,7 +15,7 @@ may want to consider adding some frames here. ]]--
 WAIT_FRAMES = 15
 
 USE_MAPPING = true -- Whether or not to use input remapping.
-CHECK_PROGRESS_EVERY = 40 -- Check progress after this many frames to detect if we get stuck.
+CHECK_PROGRESS_EVERY = 1 -- Check progress after this many frames to detect if we get stuck.
 CHECK_PREVIOUS_SCORE_EVERY = 4
 --[[ END CONFIGURATION ]]--
 
