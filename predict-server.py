@@ -52,10 +52,12 @@ from train import create_model, is_valid_track_code
 from collections import deque
 from keras.optimizers import SGD , Adam
 
+from keras.preprocessing.image import ImageDataGenerator, array_to_img, img_to_array, load_img
+
 OUT_SHAPE = 1
 
-INPUT_WIDTH = 200
-INPUT_HEIGHT = 66
+INPUT_WIDTH = 80
+INPUT_HEIGHT = 80
 INPUT_CHANNELS = 3
 
 VALIDATION_SPLIT = 0.1
@@ -64,29 +66,29 @@ USE_REVERSE_IMAGES = False
 
 ACTIONS = 3 # number of valid actions
 GAMMA = 0.99 # decay rate of past observations
-OBSERVATION = 18. # timesteps to observe before training
+OBSERVATION = 25. # timesteps to observe before training
 EXPLORE = 3000000. # frames over which to anneal epsilon
 FINAL_EPSILON = 0.0001 # final value of epsilon
 INITIAL_EPSILON = 0.1 # starting value of epsilon
 REPLAY_MEMORY = 100 # number of previous transitions to remember
-BATCH = 10 # size of minibatch
+BATCH = 20 # size of minibatch
 FRAME_PER_ACTION = 1
 
 img_rows , img_cols = 80, 80
 #Convert image into Black and white
-img_channels = 4 #We stack 4 frames
+img_channels = 3 #We stack 4 frames
 
-LEARNING_RATE = 1e-3
+LEARNING_RATE = 1e-4
 
 
 model = create_model(keep_prob=1)
 
-#print ("Now we load weight")
-#model.load_weights("model32.h5")
-#adam = Adam(lr=LEARNING_RATE)
-#model.compile(loss='mse',optimizer=adam)
-#print ("Weight load successfully")    
-#
+print ("Now we load weight")
+model.load_weights("model42.h5")
+adam = Adam(lr=LEARNING_RATE)
+model.compile(loss='mse',optimizer=adam)
+print ("Weight load successfully")    
+
 
 def prepare_image(im):
     im = im.resize((INPUT_WIDTH, INPUT_HEIGHT))
@@ -103,38 +105,22 @@ def train_network( s_t, D,action_index,x_t1_colored, r_t, init, t):
     # get the first state by doing nothing and preprocess the image to 80x80x4
     if t == 1:
 
-        x_t = skimage.color.rgb2gray(x_t1_colored)
-        
-        x_t = x_t.reshape(x_t.shape[1], x_t.shape[2], 1)  
-        
-        
-        x_t = skimage.transform.resize(x_t,(80,80))
-        
-        x_t = skimage.exposure.rescale_intensity(x_t,out_range=(0,255))
-    
-        x_t = x_t / 255.0
-        
-    
-        s_t = np.stack((x_t, x_t, x_t, x_t), axis=2)
-        #In Keras, need to reshape
-        s_t = s_t.reshape(1, s_t.shape[0], s_t.shape[1], s_t.shape[2])  #1*80*80*4
+        s_t= x_t1_colored
+        s_t = skimage.exposure.rescale_intensity(s_t,out_range=(0,255))
+        s_t = s_t / 255.0
+#        print(s_t.shape)
         action_index = 1
-        
         returnvalue = [1,0,0]
+        
         return returnvalue, s_t, D, action_index #go straight forward at init, no need to use the model
         
     
     OBSERVE = OBSERVATION
     epsilon = INITIAL_EPSILON
     
-    x_t1 = skimage.color.rgb2gray(x_t1_colored)
-    x_t1 = x_t1.reshape(x_t1.shape[1], x_t1.shape[2], 1)  
-    x_t1 = skimage.transform.resize(x_t1,(80,80))
-    x_t1 = skimage.exposure.rescale_intensity(x_t1, out_range=(0, 255))
-    x_t1 = x_t1 / 255.0
-    
-    x_t1 = x_t1.reshape(1, x_t1.shape[0], x_t1.shape[1], 1) #1x80x80x1
-    s_t1 = np.append(x_t1, s_t[:, :, :, :3], axis=3)
+    s_t1= x_t1_colored
+    s_t1 = skimage.exposure.rescale_intensity(s_t1,out_range=(0,255))
+    s_t1 = s_t1 / 255.0
 
     
     # store the transition in D
@@ -157,14 +143,15 @@ def train_network( s_t, D,action_index,x_t1_colored, r_t, init, t):
         Q_sa = model.predict(state_t1)
         targets[range(BATCH), action_t] = reward_t + GAMMA*np.max(Q_sa, axis=1)*np.invert(terminal)
 
-        loss += model.train_on_batch(state_t, targets)
+        with tf.device('/gpu:0'):
+            loss += model.train_on_batch(state_t, targets)
 
     s_t = s_t1
     t = t + 1
     
     if t % 40 == 0:
         print("Now we save model")
-        model.save_weights("model40.h5", overwrite=True)
+        model.save_weights("model43.h5", overwrite=True)
         with open("model.json", "w") as outfile:
             json.dump(model.to_json(), outfile)
     
@@ -258,10 +245,11 @@ if __name__ == "__main__":
     parser.add_argument('-p', '--port', type=int, help='Port number', default=36296)
     parser.add_argument('-c', '--cpu', action='store_true', help='Force Tensorflow to use the CPU.', default=False)
     args = parser.parse_args()
-
+    
     if args.cpu:
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
         os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
     logger.info("Loading model...")
 

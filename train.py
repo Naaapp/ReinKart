@@ -75,7 +75,7 @@ N_OUTPUT = 3
 
 img_rows , img_cols = 80, 80
 #Convert image into Black and white
-img_channels = 4 #We stack 4 frames
+img_channels = 3 #RGB
 
 def customized_loss(y_true, y_pred, loss='euclidean'):
     # Simply a mean squared error that penalizes large joystick summed values
@@ -101,7 +101,11 @@ def create_model(keep_prob=0.6):
     model.add(Convolution2D(64, (3, 3), strides=(1, 1), padding='same'))
     model.add(Activation('relu'))
     model.add(Flatten())
-    model.add(Dense(512))
+    model.add(Dense(120))
+    model.add(Activation('relu'))
+    model.add(Dense(120))
+    model.add(Activation('relu'))
+    model.add(Dense(120))
     model.add(Activation('relu'))
     model.add(Dense(3))
    

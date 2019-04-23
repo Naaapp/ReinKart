@@ -15,7 +15,7 @@ may want to consider adding some frames here. ]]--
 WAIT_FRAMES = 15
 
 USE_MAPPING = true -- Whether or not to use input remapping.
-CHECK_PROGRESS_EVERY = 1 -- Check progress after this many frames to detect if we get stuck.
+CHECK_PROGRESS_EVERY = 10 -- Check progress after this many frames to detect if we get stuck.
 CHECK_PREVIOUS_SCORE_EVERY = 4
 --[[ END CONFIGURATION ]]--
 
@@ -232,7 +232,7 @@ while util.readProgress() < 3 do
   -- if we haven't made any progress since the last check, just break.
   if frame > 50 then
     if frame % CHECK_PROGRESS_EVERY == 0 then
-      if current_progress <= previous_progress then
+      if current_progress < previous_progress then
         print(current_progress)
         break
       else max_progress = current_progress end
