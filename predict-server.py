@@ -66,12 +66,12 @@ USE_REVERSE_IMAGES = False
 
 ACTIONS = 3 # number of valid actions
 GAMMA = 0.99 # decay rate of past observations
-OBSERVATION = 25. # timesteps to observe before training
+OBSERVATION = 20. # timesteps to observe before training
 EXPLORE = 3000000. # frames over which to anneal epsilon
 FINAL_EPSILON = 0.0001 # final value of epsilon
-INITIAL_EPSILON = 0.1 # starting value of epsilon
-REPLAY_MEMORY = 100 # number of previous transitions to remember
-BATCH = 20 # size of minibatch
+INITIAL_EPSILON = 0.0 # starting value of epsilon
+REPLAY_MEMORY = 500 # number of previous transitions to remember
+BATCH = 16 # size of minibatch
 FRAME_PER_ACTION = 1
 
 img_rows , img_cols = 80, 80
@@ -84,48 +84,53 @@ LEARNING_RATE = 1e-4
 model = create_model(keep_prob=1)
 
 print ("Now we load weight")
-model.load_weights("model42.h5")
+model.load_weights("model52.h5")
 adam = Adam(lr=LEARNING_RATE)
 model.compile(loss='mse',optimizer=adam)
 print ("Weight load successfully")    
 
 
-def prepare_image(im):
-    im = im.resize((INPUT_WIDTH, INPUT_HEIGHT))
-    im_arr = np.frombuffer(im.tobytes(), dtype=np.uint8)
-    im_arr = im_arr.reshape((INPUT_HEIGHT, INPUT_WIDTH, INPUT_CHANNELS))
-    im_arr = np.expand_dims(im_arr, axis=0)
-    return im_arr
 
-
-def train_network( s_t, D,action_index,x_t1_colored, r_t, init, t):    
+def train_network( s_t, D,action_index, r_t, init, t, distance, cos, sin, velocity, vx, vy):    
     if t == OBSERVATION:
         print("observation finished")
+    
 
     # get the first state by doing nothing and preprocess the image to 80x80x4
     if t == 1:
 
-        s_t= x_t1_colored
-        s_t = skimage.exposure.rescale_intensity(s_t,out_range=(0,255))
-        s_t = s_t / 255.0
-#        print(s_t.shape)
-        action_index = 1
-        returnvalue = [1,0,0]
+        x_t = [distance, vx, vy]
         
+        #s_t = np.stack((x_t, x_t, x_t, x_t))
+        
+        #if we not stack
+        s_t = np.array([x_t])
+        
+
+        #In Keras, need to reshape
+#        s_t = s_t.reshape(1, s_t.shape[0], s_t.shape[1], s_t.shape[2])  #1*80*80*4
+        action_index = 1
+        
+        returnvalue = [1,0,0]
         return returnvalue, s_t, D, action_index #go straight forward at init, no need to use the model
+        
         
     
     OBSERVE = OBSERVATION
     epsilon = INITIAL_EPSILON
+    if distance > 0.45:
+        epsilon = 0.1
     
-    s_t1= x_t1_colored
-    s_t1 = skimage.exposure.rescale_intensity(s_t1,out_range=(0,255))
-    s_t1 = s_t1 / 255.0
+    x_t1 = [distance, vx, vy]
+
+    #s_t1 = np.stack((x_t1, s_t[0], s_t[1], s_t[2]))
+    
+    #if we not stack
+    s_t1 = np.array([x_t1])
 
     
     # store the transition in D
     terminal = 0
-    loss = 0
     D.append((s_t, action_index, r_t, s_t1, terminal))
     if len(D) > REPLAY_MEMORY:
         D.popleft()
@@ -134,24 +139,21 @@ def train_network( s_t, D,action_index,x_t1_colored, r_t, init, t):
     if t > OBSERVE:
         #sample a minibatch to train on
         minibatch = random.sample(D, BATCH)
-
-        #Now we do the experience replay
-        state_t, action_t, reward_t, state_t1, terminal = zip(*minibatch)
-        state_t = np.concatenate(state_t)
-        state_t1 = np.concatenate(state_t1)
-        targets = model.predict(state_t)
-        Q_sa = model.predict(state_t1)
-        targets[range(BATCH), action_t] = reward_t + GAMMA*np.max(Q_sa, axis=1)*np.invert(terminal)
-
-        with tf.device('/gpu:0'):
-            loss += model.train_on_batch(state_t, targets)
+        
+        for state_t, action_t, reward_t, state_t1, terminal in minibatch:
+            target = reward_t
+            if not terminal:
+                target = reward_t + GAMMA * np.amax(model.predict(state_t1)[0])
+            target_f = model.predict(state_t)
+            target_f[0][np.argmax(action_t)] = target
+            model.fit(state_t, target_f, epochs=1, verbose=0)
 
     s_t = s_t1
     t = t + 1
     
     if t % 40 == 0:
         print("Now we save model")
-        model.save_weights("model43.h5", overwrite=True)
+        model.save_weights("model52.h5", overwrite=True)
         with open("model.json", "w") as outfile:
             json.dump(model.to_json(), outfile)
     
@@ -167,13 +169,12 @@ def train_network( s_t, D,action_index,x_t1_colored, r_t, init, t):
             a_t[action_index] = 1
         else:
 #            print("----------Predicted Action----------")
-            
+#            print(s_t)
             q = model.predict(s_t)       #input a stack of 4 images, get the prediction
 
-            max_Q = np.argmax(q)
-            #print(q)
+            max_Q = np.argmax(q[0])
             action_index = max_Q
-            #print(q[0])
+            print(q[0])
             a_t[max_Q] = 1
 
     #We reduced the epsilon gradually
@@ -200,12 +201,14 @@ class TCPHandler(StreamRequestHandler):
             logger.debug(message)
 
             if message.startswith("MESSAGE"):
-                im = ImageGrab.grabclipboard()
+                
                 index_score = message.find("SCORE")
                 index_distance = message.find("DISTANCE")
                 index_cos = message.find("COS")
                 index_sin = message.find("SIN")
                 index_velocity = message.find("VELOCITY")
+                index_vx = message.find("VX")
+                index_vy = message.find("VY")
                 
                 init = message[7]
                 
@@ -222,21 +225,19 @@ class TCPHandler(StreamRequestHandler):
                 index_end = index_velocity - 1
                 sin = float(message[index_begin:index_end]) 
                 index_begin = index_velocity + 8
-                velocity = float(message[index_begin:index_begin+10])
+                index_end = index_vx - 1
+                velocity = float(message[index_begin:index_end])
+                index_begin = index_vx + 2
+                index_end = index_vy - 1
+                vx = float(message[index_begin:index_end])
+                index_begin = index_vy + 2
+                index_end = index_vy + 12
+                vy = float(message[index_begin:index_end])
                 
-                if im != None:
-                    
-                    im_ = im
-                    im = prepare_image(im_)
-                    prediction, s_t, D, action_index = train_network( s_t, D, action_index, im,score,init,t)
-                    self.wfile.write((str(int(prediction[0])) + (str(int(prediction[1]))) + (str(int(prediction[2]))) + "\n").encode('utf-8'))
-                else:
-                    self.wfile.write("PREDICTIONERROR\n".encode('utf-8'))
+                prediction, s_t, D, action_index = train_network(s_t, D, action_index, score, init, t, distance, cos, sin, velocity, vx, vy)
+                self.wfile.write((str(int(prediction[0])) + (str(int(prediction[1]))) + (str(int(prediction[2]))) + "\n").encode('utf-8'))
 
-            if message.startswith("PREDICT:"):
-                im = Image.open(message[9:])
-                prediction = model.predict(prepare_image(im), batch_size=1)[0]
-                self.wfile.write((str(prediction[0]) + "\n").encode('utf-8'))
+            
 
 if __name__ == "__main__":
 

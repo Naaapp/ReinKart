@@ -12,10 +12,10 @@ USE_CLIPBOARD = true -- Use the clipboard to send screenshots to the predict ser
 
 --[[ How many frames to wait before sending a new prediction request. If you're using a file, you
 may want to consider adding some frames here. ]]--
-WAIT_FRAMES = 15
+WAIT_FRAMES = 10
 
 USE_MAPPING = true -- Whether or not to use input remapping.
-CHECK_PROGRESS_EVERY = 10 -- Check progress after this many frames to detect if we get stuck.
+CHECK_PROGRESS_EVERY = 40 -- Check progress after this many frames to detect if we get stuck.
 CHECK_PREVIOUS_SCORE_EVERY = 4
 --[[ END CONFIGURATION ]]--
 
@@ -51,10 +51,6 @@ local frame = 1
 local init = 0
 
 
-function calculate_relative_velocity(cos , sin , vx , vy )
-  return vy*vy
-end
-
 
 outgoing_message, outgoing_message_index = nil, nil
 function request_prediction()
@@ -68,7 +64,7 @@ function request_prediction()
   local vx = util.readPlayerXV()
   local vy = util.readPlayerYV()
   local distance = current_progress
-  --print(vy)
+
 
   --score = ((dif*80)*(dif*80)*(1/velocity))*10 + 1
   score = ((dif*170)*(dif*170))*(velocity/4) + 1
@@ -96,7 +92,6 @@ function request_prediction()
 
 
   if USE_CLIPBOARD then
-    client.screenshottoclipboard()
     outgoing_message = "MESSAGE"
                       ..tostring(init)
                       .."SCORE"
@@ -109,6 +104,10 @@ function request_prediction()
                       ..string.format("%.14f", sin)
                       .."VELOCITY"
                       ..string.format("%.14f", velocity)
+                      .."VX"
+                      ..string.format("%.14f", vx)
+                      .."VY"
+                      ..string.format("%.14f", vy)
                       .."\n"
   else
     client.screenshot(SCREENSHOT_FILE)
@@ -231,8 +230,14 @@ while util.readProgress() < 3 do
 
   -- if we haven't made any progress since the last check, just break.
   if frame > 50 then
-    if frame % CHECK_PROGRESS_EVERY == 0 then
+    if frame % (CHECK_PROGRESS_EVERY / 10) == 0 then
       if current_progress < previous_progress then
+        print(current_progress)
+        break
+      end
+    end
+    if frame % CHECK_PROGRESS_EVERY == 0 then
+      if current_progress == previous_progress then
         print(current_progress)
         break
       else max_progress = current_progress end
