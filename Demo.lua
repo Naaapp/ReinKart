@@ -20,7 +20,7 @@ local state = 1
 while true do
     -- Start from the beginning and play.
     savestate.load(TRACKS[state])
-    print("Mode:", util.readMode(), "Course:", util.readCourse())
+    -- print("Mode:", util.readMode(), "Course:", util.readCourse())
 
     
 

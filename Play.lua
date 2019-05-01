@@ -248,7 +248,7 @@ while util.readProgress() < 3 do
   esc_prev = input.get()['Escape']
 end
 
-print("exit")
+-- print("exit")
 
 onexit()
 event.unregisterbyid(exit_guid)
